@@ -295,23 +295,73 @@ class PromptManagerWidget(QWidget):
     def confirm_prompt(self):
         text = self.prompt_input.toPlainText().strip()
         if text and self.current_group:
-            # 根据选择的目标执行不同的操作
-            target = self.target_combo.currentText()
-            success = True
-            
-            if target == "当前prompt输入框":
-                self.prompt_input.setText(text)
-            elif target == "系统剪贴板":
-                QApplication.clipboard().setText(text)
-            elif target == "选择的窗口":
-                success = self.paste_to_window(text)
-            
-            if success:
-                # 保存到历史记录
-                self.current_group.prompts.append(text)
-                self.prompt_input.clear()
-                self.update_history()
-                self.save_history()
+            # 检查是否是文件路径
+            if text.startswith('file:///'):
+                # 转换文件 URL 为实际路径
+                file_path = text.replace('file:///', '')
+                if os.path.exists(file_path):
+                    # 根据选择的目标执行不同的操作
+                    target = self.target_combo.currentText()
+                    success = True
+                    
+                    if target == "当前prompt输入框":
+                        self.prompt_input.setText(text)
+                    elif target == "系统剪贴板":
+                        # 将文件复制到剪贴板
+                        clipboard = QApplication.clipboard()
+                        mime_data = QMimeData()
+                        url = QUrl.fromLocalFile(file_path)
+                        mime_data.setUrls([url])
+                        clipboard.setMimeData(mime_data)
+                    elif target == "选择的窗口":
+                        if not self.selected_window_handle:
+                            QMessageBox.warning(self, "警告", "请先选择目标窗口")
+                            return
+                        
+                        # 将文件复制到剪贴板
+                        clipboard = QApplication.clipboard()
+                        mime_data = QMimeData()
+                        url = QUrl.fromLocalFile(file_path)
+                        mime_data.setUrls([url])
+                        clipboard.setMimeData(mime_data)
+                        
+                        # 激活窗口并粘贴
+                        if win32gui.IsIconic(self.selected_window_handle):
+                            win32gui.ShowWindow(self.selected_window_handle, win32con.SW_RESTORE)
+                        win32gui.SetForegroundWindow(self.selected_window_handle)
+                        time.sleep(0.1)
+                        
+                        # 模拟Ctrl+V
+                        win32api.keybd_event(win32con.VK_CONTROL, 0, 0, 0)
+                        win32api.keybd_event(ord('V'), 0, 0, 0)
+                        win32api.keybd_event(ord('V'), 0, win32con.KEYEVENTF_KEYUP, 0)
+                        win32api.keybd_event(win32con.VK_CONTROL, 0, win32con.KEYEVENTF_KEYUP, 0)
+                        time.sleep(0.1)
+                    
+                    if success:
+                        # 保存到历史记录
+                        self.current_group.files.append(file_path)
+                        self.save_file_metadata(file_path)
+                        self.prompt_input.clear()
+                        self.update_history()
+                        self.save_history()
+            else:
+                # 原有的文本处理逻辑
+                target = self.target_combo.currentText()
+                success = True
+                
+                if target == "当前prompt输入框":
+                    self.prompt_input.setText(text)
+                elif target == "系统剪贴板":
+                    QApplication.clipboard().setText(text)
+                elif target == "选择的窗口":
+                    success = self.paste_to_window(text)
+                
+                if success:
+                    self.current_group.prompts.append(text)
+                    self.prompt_input.clear()
+                    self.update_history()
+                    self.save_history()
 
     def new_group(self):
         self.current_group = PromptGroup()
